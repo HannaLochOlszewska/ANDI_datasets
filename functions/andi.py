@@ -840,3 +840,291 @@ class andi_datasets():
                         
                         
         return X1, Y1, X2, Y2, X3, Y3
+
+def andi_dataset_fixed(self, N = 1000, max_T = 1000, min_T = 10,
+                           tasks = [1, 2, 3],
+                           dimensions = [1, 2, 3],
+                           load_dataset = False, save_dataset = False, path_datasets = '',
+                           load_trajectories = False, save_trajectories = False, path_trajectories = 'datasets/',
+                           N_save = 1000, t_save = 1000):  
+        ''' Creates a dataset similar to the one given by in the ANDI challenge. 
+        Check the webpage of the challenge for more details. The default values
+        are similar to the ones used to generate the available dataset.
+        Arguments:  
+            :N (int, numpy.array):
+                - if int, number of trajectories per class (i.e. exponent and model) in the dataset.
+                - if numpy.array, number of trajectories per classes: size (number of models)x(number of classes)    
+            :max_T (int):
+                - Maximum length of the trajectories in the dataset.
+            :min_T (int):
+                - Minimum length of the trajectories in the dataset.
+            :tasks (int, array):
+                - Task(s) of the ANDI for which datasets will be generated. Task 1 corresponds to the
+                anomalous exponent estimation, Task 2 to the model prediction and Task 3 to the segmen-
+                tation problem.
+            :dimensions (int, array):
+                - Task(s) for which trajectories will be generated. Three possible values: 1, 2 and 3.
+            :load_dataset (bool):
+                - if True, the module loads the trajectories from the files task1.txt, task2.txt and
+                task3.txt and the labels from ref1.txt, ref2.txt and ref3.txt. If the trajectories do
+                not exist but the file does, the module returns and empty dataset.
+            :save_dataset (bool):
+                - if True, the module saves the datasets in a .txt following the format discussed in the 
+                webpage of the comptetion.
+            :load_trajectories (bool):
+                - if True, the module loads the trajectories of an .h5 file.  
+            :save_trajectories (bool):
+                - if True, the module saves a .h5 file for each model considered, with N_save trajectories 
+                  and T = T_save..
+            :N_save (int):
+                - Number of trajectories to save for each exponents/model. Advise: save at the beggining
+                  a big dataset (i.e. with default t_save N_save) which allows you to load any other combiantion
+                  of T and N.
+            :t_save (int):
+                - Length of the trajectories to be saved. See comments on N_save.                
+        Return:
+            The function returns 6 variables, three variables for the trajectories and three 
+            for the corresponding labels. Each variable is a list of three lists. Each of the
+            three lists corresponds to a given dimension, in ascending order. If one of the
+            tasks/dimensions was not calculated, the given list will be empty
+            :X1 (list of three lists):
+                - Trajectories corresponding to Task 1. 
+            :Y1 (list of three lists):
+                - Labels corresponding to Task 1
+            :X2 (list of three lists):
+                - Trajectories corresponding to Task 2. 
+            :Y2 (list of three lists):
+                - Labels corresponding to Task 2
+            :X3 (list of three lists):
+                - Trajectories corresponding to Task 3. 
+            :Y3 (list of three lists):
+                - Labels corresponding to Task 3      '''
+                    
+        print(f'Creating a dataset for task(s) {tasks} and dimension(s) {dimensions}.')
+        
+        # Checking inputs for errors
+        if isinstance(dimensions, int) or isinstance(dimensions, float):
+            dimensions = [dimensions]
+        if isinstance(tasks, int) or isinstance(tasks, float):
+            tasks = [tasks]
+        
+        # Define return datasets
+        X1 = [[],[],[]]; X2 = [[],[],[]]; X3 = [[],[],[]]
+        Y1 = [[],[],[]]; Y2 = [[],[],[]]; Y3 = [[],[],[]]
+        
+        if load_dataset or save_dataset:
+            # Define name of result files, if needed
+            task1 = path_datasets+'task1.txt'; ref1 = path_datasets+'ref1.txt'
+            task2 = path_datasets+'task2.txt'; ref2 = path_datasets+'ref2.txt'
+            task3 = path_datasets+'task3.txt'; ref3 = path_datasets+'ref3.txt'
+        
+        # Loading the datasets if chosen.
+        if load_dataset:            
+            for idx, (task, lab) in enumerate(zip([task1, task2, task3], [ref1, ref2, ref3])):
+                if idx+1 in tasks:
+                    
+                    try:
+                        t = csv.reader(open(task,'r'), delimiter=';', 
+                                        lineterminator='\n',quoting=csv.QUOTE_NONNUMERIC)
+                        l = csv.reader(open(lab,'r'), delimiter=';', 
+                                        lineterminator='\n',quoting=csv.QUOTE_NONNUMERIC)
+                    except:
+                        raise FileNotFoundError(f'File for task {idx+1} not found.')
+                    
+                    for trajs, labels in zip(t, l):   
+                        if task == task1:                            
+                            X1[int(trajs[0])-1].append(trajs[1:])
+                            Y1[int(trajs[0])-1].append(labels[1])
+                        if task == task2:
+                            X2[int(trajs[0])-1].append(trajs[1:])
+                            Y2[int(trajs[0])-1].append(labels[1])
+                        if task == task3:
+                            X3[int(trajs[0])-1].append(trajs[1:])
+                            Y3[int(trajs[0])-1].append(labels[1:]) 
+                    # Checking that the dataset exists in the files
+                    for dim in dimensions:
+                        if task == task1 and X1[dim-1] == []:
+                            raise FileNotFoundError('Dataset for dimension '+str(dim)+' not contained in file task1.txt.')
+                        if task == task2 and X2[dim-1] == []:
+                            raise FileNotFoundError('Dataset for dimension '+str(dim)+' not contained in file task2.txt.')
+                        if task == task3 and X3[dim-1] == []:
+                            raise FileNotFoundError('Dataset for dimension '+str(dim)+' not contained in file task3.txt.')
+                        
+            return X1, Y1, X2, Y2, X3, Y3        
+
+            
+        exponents = np.arange(0.05, 2.01, 0.05)
+        n_exp = len(exponents)
+        # Trajectories per model and exponent. Arbitrarely chosen to obtain balanced classes
+        n_per_model = np.ceil(1.6*N/5)
+        subdif, superdif = n_exp//2, n_exp//2+1
+        n_per_class =  np.zeros((self.n_models, n_exp))
+        # ctrw, attm
+        n_per_class[:2, :subdif] = np.ceil(n_per_model/subdif)
+        # fbm
+        n_per_class[2, :] = np.ceil(n_per_model/(n_exp-1))
+        n_per_class[2, exponents == 2] = 0 # FBM can't be ballistic
+        # lw
+        n_per_class[3, subdif:] = np.ceil((n_per_model/superdif)*0.8)
+        # sbm
+        n_per_class[4, :] = np.ceil(n_per_model/n_exp)
+        
+        # Define return datasets
+        X1 = [[],[],[]]; X2 = [[],[],[]]; X3 = [[],[],[]]
+        Y1 = [[],[],[]]; Y2 = [[],[],[]]; Y3 = [[],[],[]]  
+        
+        # Initialize the files
+        if save_dataset:
+            if 1 in tasks:
+                csv.writer(open(task1,'w'), delimiter=';', lineterminator='\n',)
+                csv.writer(open(ref1,'w'), delimiter=';', lineterminator='\n',)
+            elif 2 in tasks:
+                csv.writer(open(task2,'w'), delimiter=';', lineterminator='\n',)
+                csv.writer(open(ref2,'w'), delimiter=';',lineterminator='\n',)
+            elif 3 in tasks:
+                csv.writer(open(task3,'w'), delimiter=';', lineterminator='\n',)
+                csv.writer(open(ref3,'w'), delimiter=';',lineterminator='\n',)
+        
+        for dim in dimensions:             
+            # Generate the dataset of the given dimension
+            print(f'Generating dataset for dimension {dim}.')
+            dataset = self.create_dataset(T = max_T, N = n_per_class, exponents = exponents, 
+                                           dimension = dim, models = np.arange(self.n_models),
+                                           load_trajectories = False, save_trajectories = False, N_save = 100,
+                                           path = path_trajectories)            
+            
+            # Normalize trajectories
+            n_traj = dataset.shape[0]
+            norm_trajs = normalize(dataset[:, 2:].reshape(n_traj*dim, max_T))
+            dataset[:, 2:] = norm_trajs.reshape(dataset[:, 2:].shape)
+    
+            # Add localization error, Gaussian noise with sigma = [0.1, 0.5, 1]
+                
+            loc_error_amplitude = np.random.choice(np.array([0.1, 0.5, 1]), size = n_traj*dim)
+            loc_error = (np.random.randn(n_traj*dim, int(max_T)).transpose()*loc_error_amplitude).transpose()
+                        
+            dataset = self.create_noisy_localization_dataset(dataset, dimension = dim, T = max_T, noise_func = loc_error)
+            
+            # Add random diffusion coefficients
+            
+            trajs = dataset[:, 2:].reshape(n_traj*dim, max_T)
+            displacements = trajs[:, 1:] - trajs[:, :-1]
+            # Get new diffusion coefficients and displacements
+            diffusion_coefficients = np.random.randn(trajs.shape[0])
+            new_displacements = (displacements.transpose()*diffusion_coefficients).transpose()  
+            # Generate new trajectories and add to dataset
+            new_trajs = np.cumsum(new_displacements, axis = 1)
+            new_trajs = np.concatenate((np.zeros((new_trajs.shape[0], 1)), new_trajs), axis = 1)
+            dataset[:, 2:] = new_trajs.reshape(dataset[:, 2:].shape)
+            
+        
+            # Task 1 - Anomalous exponent
+            if 1 in tasks:         
+                # Creating semi-balanced datasets
+                n_exp_max = int(np.ceil(1.1*N/n_exp))
+                for exponent in exponents:
+                    dataset_exp = dataset[dataset[:, 1] == exponent].copy()
+                    np.random.shuffle(dataset_exp)
+                    dataset_exp = dataset_exp[:n_exp_max, :]
+                    try:
+                        dataset_1 = np.concatenate((dataset_1, dataset_exp), axis = 0) 
+                    except:
+                        dataset_1 = dataset_exp
+                np.random.shuffle(dataset_1)
+                dataset_1 = dataset_1[:N, :]               
+                
+                for traj in dataset_1[:N, :]:             
+                    # Cutting trajectories
+                    cut_T = np.random.randint(min_T, max_T) 
+                    traj_cut = self.cut_trajectory(traj[2:], cut_T, dim=dim).tolist()                         
+                    # Saving dataset
+                    X1[dim-1].append(traj_cut)
+                    Y1[dim-1].append(np.around(traj[0], 2), np.around(traj[1], 2))
+                    if save_dataset:                        
+                        self.save_row(np.append(dim, traj_cut), task1)
+                        self.save_row(np.append(dim, traj[0], np.around([traj[1]], 2)), ref1)
+            
+            # Task 2 - Diffusion model
+            if 2 in tasks:   
+                # Creating semi-balanced datasets
+                # If number of traejectories N is too small, consider at least
+                # one trajectory per model
+                n_per_model = max(1, int(1.1*N/5))
+                    
+                for model in range(5):
+                    dataset_mod = dataset[dataset[:, 0] == model].copy()
+                    np.random.shuffle(dataset_mod)
+                    dataset_mod = dataset_mod[:n_per_model, :]
+                    try:
+                        dataset_2 = np.concatenate((dataset_2, dataset_mod), axis = 0) 
+                    except:
+                        dataset_2 = dataset_mod
+                np.random.shuffle(dataset_2)
+                dataset_2 = dataset_2[:N, :] 
+                
+                for traj in dataset_2[:N, :]:             
+                    # Cutting trajectories
+                    cut_T = np.random.randint(min_T, max_T) 
+                    traj_cut = self.cut_trajectory(traj[2:], cut_T, dim=dim).tolist() 
+                    # Saving dataset   
+                    X2[dim-1].append(traj_cut)
+                    Y2[dim-1].append(np.around(traj[0], 2), np.around(traj[1], 2))    
+                    if save_dataset:
+                        self.save_row(np.append(dim, traj_cut), task2)
+                        self.save_row(np.append(dim, traj[0], np.around([traj[1]], 2)), ref2)   
+           
+                     
+            # Task 3 - Segmentated trajectories
+            if 3 in tasks:  
+                # Create a copy of the dataset and use it to create the 
+                # segmented dataset
+                dataset_copy1 = dataset.copy()
+                dataset_copy2 = dataset.copy()
+                
+                # Shuffling the hard way
+                order_dataset1 = np.random.choice(np.arange(n_traj), n_traj, replace = False)        
+                order_dataset2 = np.random.choice(np.arange(n_traj), n_traj, replace = False)        
+                dataset_copy1 = dataset_copy1[order_dataset1] 
+                dataset_copy2 = dataset_copy1[order_dataset2] 
+                
+                seg_dataset = self.create_segmented_dataset(dataset_copy1, dataset_copy2, dimension = dim)        
+                seg_dataset = np.c_[np.ones(n_traj)*dim, seg_dataset]     
+                
+                # Checking that there are no segmented trajectories with same exponent and model 
+                # in each segment. First we compute the difference between labels
+                diff = np.abs(seg_dataset[:, 2]-seg_dataset[:, 4]) + np.abs(seg_dataset[:, 3]-seg_dataset[:, 5])
+                # Then, if there are repeated labels, we eliminate those trajectories
+                while len(np.argwhere(diff == 0)) > 0: 
+                    seg_dataset = np.delete(seg_dataset, np.argwhere(diff == 0), axis = 0)
+                    # If the size of the dataset is too small, we generate new segmented trajectories
+                    # and add them to the dataset
+                    if seg_dataset.shape[0] < N:
+                        
+                        # Shuffling the hard way
+                        new_order_dataset1 = np.random.choice(np.arange(n_traj), n_traj, replace = False)        
+                        new_order_dataset2 = np.random.choice(np.arange(n_traj), n_traj, replace = False)        
+                        dataset_copy1 = dataset_copy1[new_order_dataset1] 
+                        dataset_copy2 = dataset_copy1[new_order_dataset2] 
+                        
+                        order_dataset1 = np.concatenate((order_dataset1, new_order_dataset1))
+                        order_dataset2 = np.concatenate((order_dataset2, new_order_dataset2))
+                        
+                        aux_seg_dataset = self.create_segmented_dataset(dataset_copy1, dataset_copy2, dimension = dim) 
+                        aux_seg_dataset = np.c_[np.ones(aux_seg_dataset.shape[0])*dim, aux_seg_dataset] 
+                        seg_dataset = np.concatenate((seg_dataset, aux_seg_dataset), axis = 0)
+
+                        diff = np.abs(seg_dataset[:, 2]-seg_dataset[:, 4]) + np.abs(seg_dataset[:, 3]-seg_dataset[:, 5])
+                    else:
+                        break        
+                    
+                    
+                X3[dim-1] = seg_dataset[:N, 6:]
+                Y3[dim-1] = seg_dataset[:N, :6]
+                
+                if save_dataset:
+                    for label, traj in zip(seg_dataset[:N, :6], seg_dataset[:N, 6:]):
+                        self.save_row(np.append(dim, traj), task3)
+                        self.save_row(np.around(label, 2), ref3) 
+                        
+                        
+        return X1, Y1, X2, Y2, X3, Y3
